@@ -1,0 +1,39 @@
+```gitignore
+# Virtual Environment
+venv/
+.venv/
+.gemini
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+
+# Sensitive files
+.env
+*.sqlite
+*.db
+*.db-journal # SQLite journal files
+
+# Logs
+logs/*.log
+logs/*.log.* # Rotated logs
+
+# Media / Temp files (adjust as needed)
+temp_media/
+downloads/
+renders/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+```

@@ -1,0 +1,39 @@
+# Web Framework & Server
+fastapi==0.111.0 # Use a recent version
+uvicorn[standard]==0.29.0
+
+# Configuration & Environment
+python-dotenv==1.0.1
+pydantic[email]==2.7.1 # Pydantic V2 is standard with recent FastAPI
+
+# Database (ORM & Migrations)
+sqlalchemy==2.0.30
+alembic==1.13.1
+# No specific driver needed for built-in sqlite
+
+# Task Queue
+celery==5.4.0
+redis==5.0.4 # Broker client
+
+# HTTP Client (for APIs)
+httpx==0.27.0
+
+# AI & LLMs
+openai==1.25.1 # Includes Whisper API access
+google-generativeai==0.5.4
+
+# Media Processing (Install later if large, but good to list)
+# moviepy==1.0.3
+# yt-dlp==2023.12.30 # Or latest
+# pexels-python==1.0.1 # Or use httpx directly
+
+# YouTube API (Install later)
+# google-api-python-client==2.130.0
+# google-auth-oauthlib==1.2.0
+# google-auth-httplib2==0.2.0
+
+# Utilities
+requests # Often handy, though httpx preferred for async
+pydantic-settings==0.2.2 # Or the version pip just installed
+openai
+yt-dlp

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <!-- Basic Styling (can be moved to a CSS file later) -->
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="url"], textarea, select {
+            width: calc(100% - 22px); /* Adjust for padding/border */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="file"] { margin-bottom: 15px; }
+        button {
+            background-color: #5cb85c;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover { background-color: #4cae4c; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .output-area { margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #f9f9f9; }
+        #status { font-weight: bold; margin-bottom: 10px; }
+        #transcript { white-space: pre-wrap; /* Preserve line breaks */ word-wrap: break-word; max-height: 300px; overflow-y: auto; background: #fff; padding: 10px; border: 1px dashed #ddd;}
+        #topicsList { list-style: decimal; padding-left: 20px; }
+        #topicsList li { margin-bottom: 5px; }
+        .hidden { display: none; }
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%;
+            width: 20px; height: 20px; animation: spin 1s linear infinite;
+            display: inline-block; margin-left: 10px; vertical-align: middle;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YT AutoVid Suite - Phase 1</h1>
+
+        <!-- Input Form -->
+        <form id="inputForm">
+            <label for="inputType">Input Type:</label>
+            <select id="inputType" name="inputType" required>
+                <option value="prompt">Text Prompt</option>
+                <option value="youtube_url">YouTube URL</option>
+                <option value="audio_file">Audio File</option>
+            </select>
+
+            <div id="promptInput">
+                <label for="promptText">Enter your script prompt:</label>
+                <textarea id="promptText" name="promptText" rows="5"></textarea>
+            </div>
+
+            <div id="urlInput" class="hidden">
+                <label for="youtubeUrl">Enter YouTube URL:</label>
+                <input type="url" id="youtubeUrl" name="youtubeUrl">
+            </div>
+
+            <div id="fileInput" class="hidden">
+                <label for="audioFile">Upload Audio File (MP3, WAV, M4A, etc.):</label>
+                <input type="file" id="audioFile" name="audioFile" accept="audio/*">
+            </div>
+
+            <button type="submit" id="submitBtn">Start Processing</button>
+            <span id="loadingIndicator" class="hidden"><div class="loader"></div> Processing...</span>
+        </form>
+
+        <!-- Output Display Area -->
+        <div id="outputArea" class="output-area hidden">
+            <h2>Job Status & Results</h2>
+            <div id="status">Status: Idle</div>
+            <div id="jobIdDisplay" class="hidden">Job ID: <span id="jobId"></span></div>
+
+            <div id="transcriptSection" class="hidden">
+                <h3>Transcript:</h3>
+                <div id="transcript">Transcript will appear here...</div>
+                <button id="generateTopicsBtn" disabled>Generate Topics</button>
+                <span id="topicLoadingIndicator" class="hidden"><div class="loader"></div> Generating topics...</span>
+            </div>
+
+            <div id="topicsSection" class="hidden">
+                <h3>Generated Topics (<span id="topicCount">0</span>):</h3>
+                <ol id="topicsList"></ol>
+                <button id="proceedToEditorBtn" class="hidden">Proceed to Video Editor (Phase 2)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        const inputTypeSelect = document.getElementById('inputType');
+        const promptInputDiv = document.getElementById('promptInput');
+        const urlInputDiv = document.getElementById('urlInput');
+        const fileInputDiv = document.getElementById('fileInput');
+        const inputForm = document.getElementById('inputForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const topicLoadingIndicator = document.getElementById('topicLoadingIndicator');
+
+        const outputArea = document.getElementById('outputArea');
+        const statusDiv = document.getElementById('status');
+        const jobIdDisplay = document.getElementById('jobIdDisplay');
+        const jobIdSpan = document.getElementById('jobId');
+        const transcriptSection = document.getElementById('transcriptSection');
+        const transcriptDiv = document.getElementById('transcript');
+        const generateTopicsBtn = document.getElementById('generateTopicsBtn');
+        const topicsSection = document.getElementById('topicsSection');
+        const topicsListUl = document.getElementById('topicsList'); // Changed to ol
+        const topicCountSpan = document.getElementById('topicCount');
+        const proceedToEditorBtn = document.getElementById('proceedToEditorBtn');
+
+        let currentJobId = null;
+        let statusInterval = null; // To hold the interval timer
+
+        // --- Input Type Switching ---
+        inputTypeSelect.addEventListener('change', function() {
+            promptInputDiv.classList.toggle('hidden', this.value !== 'prompt');
+            urlInputDiv.classList.toggle('hidden', this.value !== 'youtube_url');
+            fileInputDiv.classList.toggle('hidden', this.value !== 'audio_file');
+        });
+
+        // --- Form Submission ---
+        inputForm.addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevent default form submission
+
+            const inputType = inputTypeSelect.value;
+            const formData = new FormData();
+            formData.append('source_type', inputType);
+
+            if (inputType === 'prompt') {
+                const promptText = document.getElementById('promptText').value;
+                if (!promptText.trim()) { alert('Please enter a prompt.'); return; }
+                formData.append('prompt_text', promptText);
+            } else if (inputType === 'youtube_url') {
+                const youtubeUrl = document.getElementById('youtubeUrl').value;
+                if (!youtubeUrl.trim()) { alert('Please enter a YouTube URL.'); return; }
+                // Basic URL validation (can be improved)
+                try { new URL(youtubeUrl); } catch (_) { alert('Invalid YouTube URL format.'); return; }
+                formData.append('youtube_url', youtubeUrl);
+            } else if (inputType === 'audio_file') {
+                const audioFile = document.getElementById('audioFile').files[0];
+                if (!audioFile) { alert('Please select an audio file.'); return; }
+                formData.append('audio_file', audioFile);
+            }
+
+            // --- UI Updates ---
+            submitBtn.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+            outputArea.classList.remove('hidden');
+            statusDiv.textContent = 'Status: Submitting Job...';
+            transcriptSection.classList.add('hidden');
+            topicsSection.classList.add('hidden');
+            jobIdDisplay.classList.add('hidden');
+            if (statusInterval) clearInterval(statusInterval); // Clear previous interval
+
+            // --- API Call ---
+            try {
+                const response = await fetch('/api/v1/jobs', {
+                    method: 'POST',
+                    body: formData // FormData handles multipart/form-data automatically
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Failed to submit job. Server error.' }));
+                    throw new Error(errorData.detail || `HTTP error! Status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                currentJobId = result.job_id;
+                jobIdSpan.textContent = currentJobId;
+                jobIdDisplay.classList.remove('hidden');
+                statusDiv.textContent = `Status: ${result.status} (Job ID: ${currentJobId})`;
+                loadingIndicator.classList.add('hidden');
+
+                // Start polling for status
+                startStatusPolling(currentJobId);
+
+            } catch (error) {
+                console.error('Submission Error:', error);
+                statusDiv.textContent = `Status: Error - ${error.message}`;
+                submitBtn.disabled = false;
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        // --- Status Polling ---
+        function startStatusPolling(jobId) {
+            if (statusInterval) clearInterval(statusInterval); // Clear existing interval
+
+            statusInterval = setInterval(async () => {
+                if (!jobId) {
+                    clearInterval(statusInterval);
+                    return;
+                }
+                console.log(`Polling status for job ${jobId}...`);
+                try {
+                    const response = await fetch(`/api/v1/jobs/${jobId}/status`);
+                    if (!response.ok) {
+                        // Stop polling on server error? Or just log?
+                        console.error(`Polling error! Status: ${response.status}`);
+                         statusDiv.textContent = `Status: Error polling (HTTP ${response.status})`;
+                         // Decide if we should stop polling here
+                         // clearInterval(statusInterval);
+                        return; // Try again next interval
+                    }
+
+                    const result = await response.json();
+                    statusDiv.textContent = `Status: ${result.status} - ${result.status_message || ''}`;
+
+                    // Handle different statuses
+                    switch (result.status) {
+                        case 'PENDING':
+                        case 'PROCESSING':
+                            // Continue polling
+                            transcriptSection.classList.add('hidden');
+                            topicsSection.classList.add('hidden');
+                            generateTopicsBtn.disabled = true;
+                            break;
+                        case 'FAILED':
+                            statusDiv.textContent = `Status: FAILED - ${result.status_message || 'Unknown error'}`;
+                            clearInterval(statusInterval); // Stop polling
+                            submitBtn.disabled = false; // Allow new submission
+                            break;
+                        case 'COMPLETED': // Assume completed means transcript is ready
+                        case 'EDITING': // Or maybe editing means transcript ready
+                            statusDiv.textContent = `Status: ${result.status} - Transcript Ready`;
+                            transcriptDiv.textContent = result.transcript || 'Transcript not available.';
+                            transcriptSection.classList.remove('hidden');
+                            generateTopicsBtn.disabled = false; // Enable topic generation
+                            clearInterval(statusInterval); // Stop polling status for now
+                            submitBtn.disabled = false; // Allow new job submission
+
+                            // Check if topics already exist from a previous run
+                            if (result.topics && result.topics.length > 0) {
+                                displayTopics(result.topics);
+                                generateTopicsBtn.disabled = true; // Disable if topics already exist
+                                generateTopicsBtn.textContent = "Topics Generated";
+                            } else {
+                                topicsSection.classList.add('hidden');
+                                generateTopicsBtn.textContent = "Generate Topics";
+                            }
+                            break;
+                        // Add cases for RENDERING, UPLOADING if needed later
+                        default:
+                             // Continue polling for unknown/intermediate states
+                            break;
+                    }
+
+                } catch (error) {
+                    console.error('Polling Fetch Error:', error);
+                    statusDiv.textContent = 'Status: Error checking status...';
+                    // Decide if we should stop polling on fetch errors
+                    // clearInterval(statusInterval);
+                }
+            }, 3000); // Poll every 3 seconds
+        }
+
+        // --- Topic Generation ---
+        generateTopicsBtn.addEventListener('click', async () => {
+             if (!currentJobId) {
+                alert('No active job ID found.');
+                return;
+            }
+
+            generateTopicsBtn.disabled = true;
+            topicLoadingIndicator.classList.remove('hidden');
+            topicsSection.classList.add('hidden'); // Hide previous topics if any
+
+            try {
+                const response = await fetch(`/api/v1/jobs/${currentJobId}/generate_topics`, {
+                    method: 'POST',
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Failed to start topic generation.' }));
+                    throw new Error(errorData.detail || `HTTP error! Status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                statusDiv.textContent = `Status: ${result.status} - Generating Topics...`;
+                // Start polling again to check for topic completion
+                startStatusPolling(currentJobId); // Re-start polling to see when topics are added
+
+            } catch (error) {
+                 console.error('Topic Generation Error:', error);
+                 statusDiv.textContent = `Status: Error starting topic generation - ${error.message}`;
+                 generateTopicsBtn.disabled = false; // Re-enable button on failure
+                 topicLoadingIndicator.classList.add('hidden');
+            } finally {
+                 // Keep indicator showing until polling confirms topics are ready
+                 // topicLoadingIndicator.classList.add('hidden'); // Don't hide immediately
+            }
+        });
+
+        // --- Display Topics ---
+        function displayTopics(topics) {
+            topicsListUl.innerHTML = ''; // Clear existing list
+            if (topics && topics.length > 0) {
+                topics.forEach(topic => {
+                    const li = document.createElement('li');
+                    li.textContent = topic;
+                    topicsListUl.appendChild(li);
+                });
+                topicCountSpan.textContent = topics.length;
+                topicsSection.classList.remove('hidden');
+                // Enable next step button (Phase 2)
+                // proceedToEditorBtn.classList.remove('hidden'); // Uncomment when Phase 2 is ready
+                // Disable topic generation button as topics are now loaded
+                 generateTopicsBtn.disabled = true;
+                 generateTopicsBtn.textContent = "Topics Generated";
+                 topicLoadingIndicator.classList.add('hidden');
+
+            } else {
+                topicsSection.classList.add('hidden');
+                topicCountSpan.textContent = 0;
+            }
+        }
+
+        // Initial setup: Hide dynamic sections
+        document.addEventListener('DOMContentLoaded', () => {
+            inputTypeSelect.dispatchEvent(new Event('change')); // Trigger change to set initial visibility
+             // Clean up interval if user navigates away
+            window.addEventListener('beforeunload', () => {
+                if (statusInterval) clearInterval(statusInterval);
+            });
+        });
+
+    </script>
+</body>
+</html>
